@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Click Handler Tester</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #0f1419;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+        .log {
+            background: #1a1f2e;
+            border: 1px solid #2a3f5f;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            height: 400px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            padding: 5px;
+            border-bottom: 1px solid #2a3f5f;
+            font-size: 12px;
+        }
+        .log-entry.error { color: #ff5252; }
+        .log-entry.success { color: #00c853; }
+        .log-entry.info { color: #1e88e5; }
+        
+        .card {
+            background: #2d2d2d;
+            border: 2px solid #1e88e5;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .card:hover {
+            border-color: #00c853;
+        }
+        
+        button {
+            background: #1e88e5;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 5px 10px 0;
+        }
+        button:hover {
+            background: #1565c0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Click Handler Test Suite</h1>
+    
+    <div style="margin-bottom: 20px;">
+        <button onclick="testDirectClick()">Test Direct Click</button>
+        <button onclick="testFetch()">Test API Fetch</button>
+        <button onclick="testViewSwitch()">Test View Switch</button>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <div class="log" id="log"></div>
+
+    <h2>Test Card (Click Me!)</h2>
+    <div class="card" data-ticker="AAPL" onclick="cardClickHandler(event)">
+        <h3>AAPL - Apple Inc</h3>
+        <p>Click this card to test the click handler</p>
+        <p id="cardStatus">Waiting for click...</p>
+    </div>
+
+    <script>
+        const logEl = document.getElementById('log');
+
+        function log(msg, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+            console.log(`[${type.toUpperCase()}]`, msg);
+        }
+
+        function clearLog() {
+            logEl.innerHTML = '';
+            log('Log cleared', 'info');
+        }
+
+        function cardClickHandler(event) {
+            log('cardClickHandler triggered!', 'success');
+            const ticker = event.currentTarget.dataset.ticker;
+            log(`Card clicked with ticker: ${ticker}`, 'success');
+            document.getElementById('cardStatus').textContent = `✓ Click received for ${ticker}`;
+        }
+
+        function testDirectClick() {
+            log('Testing direct click...', 'info');
+            const card = document.querySelector('[data-ticker="AAPL"]');
+            if (card) {
+                log('Card element found', 'success');
+                log(`Card has data-ticker: ${card.dataset.ticker}`, 'success');
+                card.click();
+                log('Triggered card.click()', 'success');
+            } else {
+                log('Card element NOT found!', 'error');
+            }
+        }
+
+        function testFetch() {
+            log('Testing API fetch...', 'info');
+            fetch('/api/health')
+                .then(r => {
+                    log(`API response status: ${r.status}`, r.status === 200 ? 'success' : 'error');
+                    return r.json();
+                })
+                .then(data => {
+                    log(`API response: ${JSON.stringify(data)}`, 'success');
+                })
+                .catch(err => {
+                    log(`API fetch error: ${err.message}`, 'error');
+                });
+        }
+
+        function testViewSwitch() {
+            log('Testing view switching logic...', 'info');
+            
+            // Create test elements if they don't exist
+            let listView = document.getElementById('listView');
+            let detailView = document.getElementById('detailView');
+            
+            if (!listView) {
+                listView = document.createElement('div');
+                listView.id = 'listView';
+                listView.className = 'active';
+                listView.textContent = 'LIST VIEW';
+                listView.style.cssText = 'padding: 20px; background: #1a2633; margin: 20px 0; border-radius: 8px;';
+                document.body.appendChild(listView);
+                log('Created test listView element', 'info');
+            }
+            
+            if (!detailView) {
+                detailView = document.createElement('div');
+                detailView.id = 'detailView';
+                detailView.textContent = 'DETAIL VIEW';
+                detailView.style.cssText = 'padding: 20px; background: #1a2633; margin: 20px 0; border-radius: 8px; display: none;';
+                document.body.appendChild(detailView);
+                log('Created test detailView element', 'info');
+            }
+            
+            log(`Before switch - listView.active: ${listView.classList.contains('active')}, detailView.active: ${detailView.classList.contains('active')}`, 'info');
+            
+            // Test the switch
+            listView.classList.remove('active');
+            detailView.classList.add('active');
+            
+            log(`After switch - listView.active: ${listView.classList.contains('active')}, detailView.active: ${detailView.classList.contains('active')}`, 'success');
+            
+            // Also test display styles
+            listView.style.display = 'none';
+            detailView.style.display = 'block';
+            
+            log('View switched successfully!', 'success');
+        }
+
+        // Initial log
+        log('Test suite loaded', 'success');
+        log('Open browser DevTools (F12) to see console logs', 'info');
+    </script>
+</body>
+</html>

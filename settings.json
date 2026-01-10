@@ -1,0 +1,13 @@
+{
+  "conviction_threshold": 4,
+  "rsi_min": 10,
+  "rsi_max": 60,
+  "volume_ratio_min": 0.8,
+  "ma_min_period": 150,
+  "ma_max_period": 200,
+  "show_ma_20": true,
+  "show_ma_50": true,
+  "show_ma_optimal_trend": true,
+  "ma_trend_min_period": 150,
+  "ma_trend_max_period": 200
+}
