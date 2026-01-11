@@ -2430,16 +2430,22 @@ def index():
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px;">
                 <div style="background: #1a1f2e; padding: 20px; border-radius: 8px; border: 1px solid #2a3f5f;">
                     <h3 style="color: #1e88e5; margin-top: 0;">% Above MA20 → Gains</h3>
-                    <canvas id="ma20GainChart" height="300"></canvas>
+                    <div style="height: 300px; position: relative;">
+                        <canvas id="ma20GainChart"></canvas>
+                    </div>
                 </div>
                 <div style="background: #1a1f2e; padding: 20px; border-radius: 8px; border: 1px solid #2a3f5f;">
                     <h3 style="color: #1e88e5; margin-top: 0;">% Above MA50 → Gains</h3>
-                    <canvas id="ma50GainChart" height="300"></canvas>
+                    <div style="height: 300px; position: relative;">
+                        <canvas id="ma50GainChart"></canvas>
+                    </div>
                 </div>
             </div>
             <div style="background: #1a1f2e; padding: 20px; border-radius: 8px; border: 1px solid #2a3f5f;">
                 <h3 style="color: #1e88e5; margin-top: 0;">Optimal MA Period Distribution</h3>
-                <canvas id="maPeriodChart" height="200"></canvas>
+                <div style="height: 200px; position: relative;">
+                    <canvas id="maPeriodChart"></canvas>
+                </div>
             </div>
         </div>
     </div>
