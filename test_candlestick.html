@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Candlestick Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@2.5.2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.2.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.1.1"></script>
+</head>
+<body style="background: #1a1a1a; color: #fff; padding: 20px;">
+    <h1>Candlestick Plugin Test</h1>
+    <button id="testBtn" style="padding: 10px 20px; font-size: 16px; margin-bottom: 20px;">Test Candlestick Rendering</button>
+    <div id="result" style="margin-bottom: 20px;"></div>
+    <div style="width: 800px; height: 400px;">
+        <canvas id="chart"></canvas>
+    </div>
+    
+    <script>
+        document.getElementById('testBtn').addEventListener('click', function() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<div style="color: yellow;">Testing...</div>';
+            
+            try {
+                // Check if Chart.js loaded
+                if (typeof Chart === 'undefined') {
+                    resultDiv.innerHTML = '<div style="color: red;">✗ Chart.js not loaded</div>';
+                    return;
+                }
+                
+                resultDiv.innerHTML += '<div style="color: green;">✓ Chart.js ' + Chart.version + ' loaded</div>';
+                
+                // Check if candlestick controller registered
+                const controllers = Object.keys(Chart.registry.controllers);
+                resultDiv.innerHTML += '<div>Controllers: ' + controllers.join(', ') + '</div>';
+                
+                if (controllers.includes('candlestick')) {
+                    resultDiv.innerHTML += '<div style="color: green;">✓ Candlestick controller registered!</div>';
+                } else {
+                    resultDiv.innerHTML += '<div style="color: red;">✗ Candlestick controller NOT registered</div>';
+                    return;
+                }
+                
+                // Test data
+                const ohlcData = [
+                    { x: '2024-01-01', o: 100, h: 110, l: 95, c: 105 },
+                    { x: '2024-01-02', o: 105, h: 115, l: 103, c: 108 },
+                    { x: '2024-01-03', o: 108, h: 112, l: 102, c: 103 },
+                    { x: '2024-01-04', o: 103, h: 108, l: 98, c: 106 },
+                    { x: '2024-01-05', o: 106, h: 118, l: 105, c: 115 }
+                ];
+                
+                // Create chart
+                const ctx = document.getElementById('chart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'candlestick',
+                    data: {
+                        datasets: [{
+                            label: 'OHLC Test',
+                            data: ohlcData
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+                
+                resultDiv.innerHTML += '<div style="color: green; font-weight: bold;">✓ Candlestick chart rendered successfully!</div>';
+                
+            } catch (e) {
+                resultDiv.innerHTML += '<div style="color: red;">✗ Error: ' + e.message + '</div>';
+                console.error(e);
+            }
+        });
+        
+        // Auto-run test
+        setTimeout(() => {
+            document.getElementById('testBtn').click();
+        }, 1000);
+    </script>
+</body>
+</html>

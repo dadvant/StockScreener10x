@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Candlestick Direct Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@2.5.2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.2.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.1.1"></script>
+</head>
+<body style="background:#0f1419;padding:20px;">
+    <h1 style="color:#fff;">🕯️ Direct Candlestick Test</h1>
+    <div id="status" style="color:#fff;padding:10px;background:#1a1f2e;margin:10px 0;"></div>
+    <div style="width:1200px;height:600px;background:#1a1f2e;padding:20px;">
+        <canvas id="testChart"></canvas>
+    </div>
+    
+    <script>
+        const status = document.getElementById('status');
+        
+        // Register controllers
+        try {
+            const fin = window['chartjs-chart-financial'];
+            if (fin && Chart && Chart.register) {
+                const { CandlestickController, OhlcController, CandlestickElement, OhlcElement } = fin;
+                Chart.register(CandlestickController, OhlcController, CandlestickElement, OhlcElement);
+                status.innerHTML += '✓ Controllers registered<br>';
+            } else {
+                status.innerHTML += '✗ Financial plugin not available<br>';
+            }
+        } catch (e) {
+            status.innerHTML += '✗ Error: ' + e.message + '<br>';
+        }
+        
+        // Check if controller exists
+        const hasCandle = !!(Chart?.registry?.getController?.('candlestick'));
+        status.innerHTML += (hasCandle ? '✓' : '✗') + ' Candlestick controller: ' + hasCandle + '<br>';
+        
+        // Create simple test data
+        const ohlcData = [
+            { x: '2024-01-01', o: 100, h: 110, l: 95, c: 105 },
+            { x: '2024-01-02', o: 105, h: 115, l: 103, c: 112 },
+            { x: '2024-01-03', o: 112, h: 118, l: 108, c: 110 },
+            { x: '2024-01-04', o: 110, h: 114, l: 102, c: 106 },
+            { x: '2024-01-05', o: 106, h: 120, l: 105, c: 118 },
+            { x: '2024-01-08', o: 118, h: 125, l: 116, c: 122 },
+            { x: '2024-01-09', o: 122, h: 128, l: 119, c: 125 },
+            { x: '2024-01-10', o: 125, h: 130, l: 118, c: 121 }
+        ];
+        
+        // Create chart
+        try {
+            const ctx = document.getElementById('testChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'candlestick',
+                data: {
+                    datasets: [{
+                        label: 'Stock Price',
+                        data: ohlcData,
+                        color: {
+                            up: '#26a69a',
+                            down: '#ef5350',
+                            unchanged: '#999'
+                        }
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true, labels: { color: '#fff' } }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: { unit: 'day' },
+                            grid: { color: 'rgba(255,255,255,0.1)' },
+                            ticks: { color: '#999' }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.1)' },
+                            ticks: { color: '#999' }
+                        }
+                    }
+                }
+            });
+            status.innerHTML += '✓ Chart created successfully<br>';
+            status.innerHTML += '<strong style="color:#26a69a;">SUCCESS! If you see candlesticks with wicks above, the plugin works!</strong>';
+        } catch (e) {
+            status.innerHTML += '✗ Chart creation error: ' + e.message + '<br>';
+        }
+    </script>
+</body>
+</html>

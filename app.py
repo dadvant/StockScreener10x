@@ -762,13 +762,79 @@ class TenXHunter:
             breakdown['bonus_1m'] = 1.0 if gain_1m > 15 else 0.0
             conviction += breakdown['bonus_1m']
 
-            # Optional: News/Event scoring (placeholder heuristic; to be enhanced)
-            def _news_event_score(tkr: str) -> float:
-                # TODO: integrate real news sentiment & event calendar
-                # For now, conservative 0 score
-                return 0.0
-            breakdown['news_event'] = _news_event_score(ticker)
-            conviction += breakdown['news_event']
+            # News/Event scoring (sentiment + upcoming catalysts)
+            def _news_event_score(tkr: str):
+                try:
+                    articles = self.get_news(tkr, limit=10) or []
+                    pos_kw = ['beat', 'record', 'contract', 'deal', 'partnership', 'award', 'approval', 'fda approval', 'upgrade', 'raised', 'surge', 'strong', 'profit', 'revenue growth', 'expansion', 'backlog', 'milestone', 'buyback']
+                    neg_kw = ['downgrade', 'miss', 'delay', 'investigation', 'sec', 'ftc', 'antitrust', 'recall', 'layoff', 'cut', 'guidance cut', 'short report', 'fraud', 'lawsuit', 'terminated', 'reject', 'fda rejection', 'halt']
+
+                    pos_hits = 0
+                    neg_hits = 0
+                    found_catalysts = []
+                    for a in articles:
+                        title = (a.get('title') or '').lower()
+                        if not title:
+                            continue
+                        if any(k in title for k in pos_kw):
+                            pos_hits += 1
+                            if 'contract' in title and 'New contract win' not in found_catalysts:
+                                found_catalysts.append('New contract win')
+                            elif ('partnership' in title or 'deal' in title) and 'Strategic partnership announced' not in found_catalysts:
+                                found_catalysts.append('Strategic partnership announced')
+                            elif 'upgrade' in title and 'Analyst upgrade' not in found_catalysts:
+                                found_catalysts.append('Analyst upgrade')
+                            elif 'approval' in title and 'Regulatory approval milestone' not in found_catalysts:
+                                found_catalysts.append('Regulatory approval milestone')
+                            elif 'buyback' in title and 'Share buyback' not in found_catalysts:
+                                found_catalysts.append('Share buyback')
+                        if any(k in title for k in neg_kw):
+                            neg_hits += 1
+
+                    # base sentiment score clipped
+                    base = pos_hits * 0.25 - neg_hits * 0.30
+                    base = max(-1.5, min(1.5, base))
+
+                    # upcoming earnings bonus if within ~10 days (lightweight check)
+                    earn_bonus = 0.0
+                    try:
+                        stock = yf.Ticker(tkr)
+                        info = stock.info or {}
+                        ed = info.get('earningsDate')
+                        if isinstance(ed, (list, tuple)) and len(ed) > 0:
+                            earn_date = ed[0]
+                            try:
+                                if hasattr(earn_date, 'to_pydatetime'):
+                                    earn_dt = earn_date.to_pydatetime()
+                                else:
+                                    earn_dt = pd.to_datetime(earn_date).to_pydatetime()
+                                days_to = (earn_dt - datetime.now()).days
+                                if 0 <= days_to <= 3:
+                                    earn_bonus = 0.6
+                                    if 'Earnings in 1-3 days' not in found_catalysts:
+                                        found_catalysts.append('Earnings in 1-3 days')
+                                elif 0 < days_to <= 10:
+                                    earn_bonus = 0.4
+                                    if 'Earnings upcoming' not in found_catalysts:
+                                        found_catalysts.append('Earnings upcoming')
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
+                    # modest bonus for government/contract related wins
+                    contract_bonus = 0.3 if any('contract' in (a.get('title','').lower()) for a in articles) else 0.0
+
+                    total = base + earn_bonus + contract_bonus
+                    total = max(-2.0, min(2.0, total))
+
+                    return float(round(total, 2)), found_catalysts[:3]
+                except Exception:
+                    return 0.0, []
+
+            score, catalysts = _news_event_score(ticker)
+            breakdown['news_event'] = score
+            conviction += score
             
             conviction = float(max(0, min(10, conviction)))
             breakdown['total'] = conviction
@@ -827,7 +893,7 @@ class TenXHunter:
                 'sector': sector,
                 'description': description,
                 'company_name': company_name,
-                'catalysts': [],
+                'catalysts': catalysts,
                 'score_breakdown': breakdown
 
             }
@@ -2605,11 +2671,8 @@ def index():
                 .then(data => {
                     console.log('Results loaded:', data);
                     
-                    // Handle both old array format and new object format
                     let results = data.results || data;
-                    if (!Array.isArray(results)) {
-                        results = [];
-                    }
+                    if (!Array.isArray(results)) results = [];
                     
                     const count = data.count !== undefined ? data.count : results.length;
                     const total = data.total !== undefined ? data.total : results.length;
@@ -2625,8 +2688,7 @@ def index():
                     }
 
                     try {
-                        const html = results.map(opp => {
-                            console.log('Processing stock:', opp.ticker, opp);
+                        const cardHtml = (opp) => {
                             const potentialX = opp.potential_x || ((opp.conviction / 10) * 10).toFixed(1);
                             const positionSize = opp.position_size || 2000;
                             const stopLoss = opp.stop_loss || (opp.price * 0.92);
@@ -2635,7 +2697,14 @@ def index():
                             const breakdown = opp.score_breakdown || {};
                             const breakdownHtml = Object.keys(breakdown).length ? `<div class="card-reasoning">${Object.entries(breakdown).filter(([k]) => k!=='total').map(([k,v]) => `<div class="reason-item">${k.replace(/_/g,' ')}: ${Number(v).toFixed(2)}</div>`).join('')}</div>` : '';
                             const reasonHtml = reasonArr.length ? `<div class="card-reasoning">${reasonArr.slice(0,2).map(r => `<div class="reason-item">${r}</div>`).join('')}</div>` : breakdownHtml;
-                            
+                            const cats = (opp.catalysts && opp.catalysts.length > 0 ? opp.catalysts : [
+                                opp.gain_1m > 15 ? '1-month momentum surge' : 'Positive momentum trend',
+                                opp.gain_6m > 20 ? '6-month breakout' : 'Technical strength',
+                                'Earnings upcoming'
+                            ]).slice(0,3);
+                            // Check for earnings catalysts for badge
+                            const hasEarnings = (opp.catalysts || []).some(c => c.toLowerCase().includes('earning'));
+                            const earningsBadge = hasEarnings ? `<span style="display: inline-block; background: #ff6b35; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75em; font-weight: 600; margin-left: 8px;">📅 EARNINGS SOON</span>` : '';
                             return `
                             <div class="opportunity-card" data-ticker="${opp.ticker}" role="button" aria-label="View ${opp.ticker} details" style="cursor: pointer;" tabindex="0">
                                 <div class="card-header">
@@ -2643,6 +2712,7 @@ def index():
                                         <span class="ticker-large" style="cursor:pointer">${opp.ticker}</span>
                                         <span class="company-name">${opp.company_name || opp.ticker}</span>
                                         <span class="sector-tag">${opp.sector || 'Technology'}</span>
+                                        ${earningsBadge}
                                     </div>
                                     <div class="conviction-section">
                                         <span class="conviction-score">${opp.conviction.toFixed(1)}/10</span>
@@ -2650,7 +2720,6 @@ def index():
                                     </div>
                                     ${reasonHtml}
                                 </div>
-                                
                                 <div class="card-body">
                                     <div class="metrics-row">
                                         <div class="metric-box">
@@ -2674,96 +2743,72 @@ def index():
                                             <div class="metric-value success">$${positionSize.toLocaleString()}</div>
                                         </div>
                                     </div>
-                                    
                                     <div class="analysis-text">
                                         ${opp.description || ('Price > ' + (opp.optimal_ma || 200) + '-MA, bullish momentum.')}
                                     </div>
-                                    
                                     <div class="catalysts-section">
                                         <strong>Catalysts:</strong>
-                                        <ul class="catalyst-list">
-                                            ${(opp.catalysts && opp.catalysts.length > 0 ? opp.catalysts : [
-                                                opp.gain_1m > 15 ? '1-month momentum surge' : 'Positive momentum trend',
-                                                opp.gain_6m > 20 ? '6-month breakout' : 'Technical strength',
-                                                'Earnings upcoming'
-                                            ]).slice(0, 3).map(c => `<li>${c}</li>`).join('')}
-                                        </ul>
+                                        <ul class="catalyst-list">${cats.map(c => `<li>${c}</li>`).join('')}</ul>
                                     </div>
-                                    
                                     <div class="trade-setup">
                                         <button class="buy-btn" onclick="event.stopPropagation(); alert('Order placed: ${opp.ticker}');">BUY $${positionSize.toLocaleString()}</button>
                                         <button class="skip-btn" onclick="event.stopPropagation();">SKIP FOR NOW</button>
                                     </div>
                                 </div>
-                            </div>
-                        `;
-                        }).join('');
-
-                        // Add header with count info
-                        var headerMsg = '✓ Found ' + count + ' candidates';
-                        if (count < total) {
-                            headerMsg += ' out of ' + total + ' (filtered at ' + minConv.toFixed(1) + '/10 conviction)';
-                        }
-                        const header = `
-                            <div style="padding: 12px; background: #2a3f5f; border-radius: 6px; margin-bottom: 16px; border-left: 4px solid #1e88e5;">
-                                <p style="margin: 0; color: #1e88e5; font-weight: 600;">${headerMsg}</p>
                             </div>`;
-                        
-                        document.getElementById('resultsDiv').innerHTML = header + html;
-                        console.log('Results rendered successfully');
-                        
-                        // Bind click handlers to all cards
+                        };
+
+                        const headerMsg = (() => {
+                            let msg = '✓ Found ' + count + ' candidates';
+                            if (count < total) msg += ' out of ' + total + ' (filtered at ' + minConv.toFixed(1) + '/10 conviction)';
+                            return `
+                                <div style="padding: 12px; background: #2a3f5f; border-radius: 6px; margin-bottom: 16px; border-left: 4px solid #1e88e5;">
+                                    <p style="margin: 0; color: #1e88e5; font-weight: 600;">${msg}</p>
+                                </div>`;
+                        })();
+
+                        const momentum = results.filter(r => r.is_momentum);
+                        const tenx = results.filter(r => r.is_ten_x);
+                        const others = results.filter(r => !r.is_momentum && !r.is_ten_x);
+
+                        const section = (title, arr) => arr && arr.length ? `
+                            <h2>${title}</h2>
+                            ${arr.map(cardHtml).join('')}
+                        ` : '';
+
+                        const html = headerMsg
+                            + section('⚡ Momentum Picks', momentum)
+                            + section('🌟 TenX Picks', tenx)
+                            + section('📎 Other Candidates', others);
+
+                        const container = document.getElementById('resultsDiv');
+                        container.innerHTML = html;
+                        console.log('Results rendered (Momentum/TenX split)');
+
                         setTimeout(() => {
                             const cards = document.querySelectorAll('.opportunity-card');
                             console.log(`Found ${cards.length} cards to bind`);
-                            
                             cards.forEach(card => {
                                 const ticker = card.getAttribute('data-ticker');
                                 card.addEventListener('click', function(e) {
-                                    // Only trigger if not clicking on buttons
-                                    if (e.target.closest('.buy-btn') || e.target.closest('.skip-btn')) {
-                                        return;
-                                    }
-                                    console.log(`🃏 Card clicked: ${ticker}`);
+                                    if (e.target.closest('.buy-btn') || e.target.closest('.skip-btn')) return;
                                     e.preventDefault();
-                                    console.log('Calling viewStockDetail from card handler...');
-                                    if (window.viewStockDetail) {
-                                        viewStockDetail(ticker);
-                                    } else {
-                                        console.error('viewStockDetail not available!');
-                                    }
+                                    if (window.viewStockDetail) viewStockDetail(ticker);
                                 });
-                                
-                                // Add visual feedback
-                                card.addEventListener('mouseenter', function() {
-                                    this.style.opacity = '0.8';
-                                });
-                                card.addEventListener('mouseleave', function() {
-                                    this.style.opacity = '1';
-                                });
+                                card.addEventListener('mouseenter', function(){ this.style.opacity = '0.8'; });
+                                card.addEventListener('mouseleave', function(){ this.style.opacity = '1'; });
                             });
                         }, 0);
 
-                        // Extra robust handler: ensure clicks on the ticker text always open details
-                        // Use capture phase so it runs before other handlers that may stop propagation
                         document.addEventListener('click', function(e){
                             try {
                                 const t = e.target.closest && e.target.closest('.ticker-large');
                                 if (!t) return;
                                 const ticker = t.textContent && t.textContent.trim();
                                 if (!ticker) return;
-                                // If click originated on a buy/skip button, ignore
                                 if (e.target.closest && (e.target.closest('.buy-btn') || e.target.closest('.skip-btn'))) return;
-                                console.log('🎯 Ticker span click captured ->', ticker);
                                 e.preventDefault();
-                                try { 
-                                    console.log('Calling viewStockDetail from ticker handler...');
-                                    if (window.viewStockDetail) {
-                                        window.viewStockDetail(ticker); 
-                                    } else {
-                                        console.error('viewStockDetail not found on window!');
-                                    }
-                                } catch(err) { console.error('ticker click handler error', err); }
+                                if (window.viewStockDetail) window.viewStockDetail(ticker);
                             } catch(err) { console.error('ticker delegated handler error', err); }
                         }, true);
                     } catch (err) {

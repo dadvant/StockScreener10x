@@ -1,5 +1,5 @@
 {
-  "conviction_threshold": 4,
+  "conviction_threshold": 3.0,
   "rsi_min": 10,
   "rsi_max": 60,
   "volume_ratio_min": 0.8,

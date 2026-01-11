@@ -1,0 +1,26 @@
+
+StatusCode        : 200
+StatusDescription : OK
+Content           : {
+                      "ai_analysis": {
+                        "ai_reasoning": [
+                          "Price 12.8% above optimal MA - Strong uptrend"
+                        ],
+                        "bear_case": [
+                          "Early-stage accumulation means volatility and risk of pullbacks",
+                        …
+RawContent        : HTTP/1.1 200 OK
+                    Server: Werkzeug/3.1.4
+                    Server: Python/3.10.11
+                    Date: Thu, 08 Jan 2026 19:28:03 GMT
+                    Access-Control-Allow-Origin: *
+                    Connection: close
+                    Content-Type: application/json
+                    Content-Length:…
+Headers           : {[Server, System.String[]], [Date, System.String[]], [Access-Control-Allow-Origin, System.String[]], [Connection, System.String[]]…}
+Images            : {}
+InputFields       : {}
+Links             : {}
+RawContentLength  : 104795
+RelationLink      : {}
+

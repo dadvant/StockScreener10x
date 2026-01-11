@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Onclick</title>
+    <style>
+        body { background: #0f1419; color: #e0e0e0; font-family: Arial; padding: 20px; }
+        .opportunity-card {
+            background: #2d2d2d;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            cursor: pointer !important;
+            padding: 20px;
+            border-left: 5px solid #00c853;
+            position: relative;
+            pointer-events: auto !important;
+        }
+        .opportunity-card * {
+            pointer-events: none !important;
+        }
+        .opportunity-card .buy-btn,
+        .opportunity-card .skip-btn {
+            pointer-events: auto !important;
+        }
+        .ticker-large {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #1e88e5;
+        }
+        .buy-btn, .skip-btn {
+            padding: 8px 16px;
+            margin: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Click Test</h1>
+    <div id="results"></div>
+    
+    <script>
+        function viewStockDetail(ticker) {
+            alert('✅ viewStockDetail called for: ' + ticker);
+            console.log('✅ viewStockDetail called for:', ticker);
+        }
+        
+        window.viewStockDetail = viewStockDetail;
+        console.log('✅ window.viewStockDetail assigned:', typeof window.viewStockDetail);
+        
+        // Fetch mock results and render
+        fetch('http://localhost:5000/api/mock_results')
+            .then(r => r.json())
+            .then(data => {
+                const results = data.results || [];
+                const html = results.slice(0, 3).map(opp => `
+                    <div class="opportunity-card" data-ticker="${opp.ticker}" onclick="event.stopPropagation();alert('Card clicked: ${opp.ticker}');console.log('🔴 INLINE ONCLICK FIRED:', '${opp.ticker}');try{window.viewStockDetail('${opp.ticker}');}catch(e){console.error('inline error:',e);alert('Error: '+e.message);}" tabindex="0">
+                        <div class="ticker-large" style="cursor:pointer">${opp.ticker}</div>
+                        <div>Company: ${opp.company_name}</div>
+                        <div>Price: $${opp.price.toFixed(2)}</div>
+                        <div>Conviction: ${opp.conviction.toFixed(1)}/10</div>
+                        <button class="buy-btn" onclick="event.stopPropagation(); alert('BUY button');">BUY</button>
+                        <button class="skip-btn" onclick="event.stopPropagation(); alert('SKIP button');">SKIP</button>
+                    </div>
+                `).join('');
+                
+                document.getElementById('results').innerHTML = html;
+                console.log('Results rendered');
+            })
+            .catch(err => {
+                document.getElementById('results').innerHTML = 'Error: ' + err.message;
+            });
+    </script>
+</body>
+</html>
