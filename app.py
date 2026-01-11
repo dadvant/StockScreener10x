@@ -2848,6 +2848,7 @@ def index():
                     },
                     scales: {
                         y: {
+                            beginAtZero: true,
                             ticks: { color: '#999' },
                             grid: { color: '#2a3f5f' },
                             title: { text: 'Avg Gain %', color: '#999' }
@@ -2914,6 +2915,7 @@ def index():
                     },
                     scales: {
                         y: {
+                            beginAtZero: true,
                             ticks: { color: '#999' },
                             grid: { color: '#2a3f5f' },
                             title: { text: 'Avg Gain %', color: '#999' }
@@ -2980,6 +2982,7 @@ def index():
                     },
                     scales: {
                         y: {
+                            beginAtZero: true,
                             ticks: { color: '#999' },
                             grid: { color: '#2a3f5f' },
                             title: { text: 'Normalized Frequency', color: '#999', display: true }
