@@ -1388,8 +1388,13 @@ def get_statistics():
         
         conn.close()
         
+        # Ensure MA20 data goes to 10% (0%, 2%, 4%, 6%, 8%, 10%)
+        for key in ['sp500', 'nasdaq100', 'full5000']:
+            while len(ma20_gains[key]) < 6:  # 6 buckets for 0-10%
+                ma20_gains[key].append(0)
+        
         # Format MA20/50 labels
-        ma20_gains['labels'] = [f'{i*2}%' for i in range(len(ma20_gains['sp500']))]
+        ma20_gains['labels'] = [f'{i*2}%' for i in range(6)]  # Fixed to 0-10%
         ma50_gains['labels'] = [f'{i*2}%' for i in range(len(ma50_gains['sp500']))]
         
         # Normalize MA period counts to frequencies
