@@ -3051,7 +3051,7 @@ def index():
                             },
                             grid: { color: '#2a3f5f' },
                             title: { 
-                                text: 'Normalized Frequency (0-1)', 
+                                text: 'Normalized Score (0-1)', 
                                 color: '#999', 
                                 display: true,
                                 font: { size: fontSize * 0.875 }
