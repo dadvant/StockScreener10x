@@ -2816,11 +2816,20 @@ def index():
 
             const fontSize = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
 
+            // Create gradients where values above 0.5 are less transparent
+            const createGradient = (ctx, r, g, b) => {
+                const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
+                gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.7)`);  // Top (y=1.0) - less transparent
+                gradient.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, 0.4)`); // Middle (y=0.5) - medium
+                gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0.3)`);  // Bottom (y=0) - more transparent
+                return gradient;
+            };
+
             const datasets = [
                 {
                     label: 'S&P 500',
                     data: ma20Data.sp500 || [],
-                    backgroundColor: 'rgba(30, 136, 229, 0.4)',
+                    backgroundColor: createGradient(ctx.getContext('2d'), 30, 136, 229),
                     borderColor: 'rgba(30, 136, 229, 0.8)',
                     borderWidth: 2,
                     tension: 0,
@@ -2829,7 +2838,7 @@ def index():
                 {
                     label: 'Nasdaq 100',
                     data: ma20Data.nasdaq100 || [],
-                    backgroundColor: 'rgba(255, 179, 0, 0.4)',
+                    backgroundColor: createGradient(ctx.getContext('2d'), 255, 179, 0),
                     borderColor: 'rgba(255, 179, 0, 0.8)',
                     borderWidth: 2,
                     tension: 0,
@@ -2838,7 +2847,7 @@ def index():
                 {
                     label: 'Full 5000',
                     data: ma20Data.full5000 || [],
-                    backgroundColor: 'rgba(0, 200, 83, 0.4)',
+                    backgroundColor: createGradient(ctx.getContext('2d'), 0, 200, 83),
                     borderColor: 'rgba(0, 200, 83, 0.8)',
                     borderWidth: 2,
                     tension: 0,
@@ -2905,11 +2914,20 @@ def index():
 
             const fontSize = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
 
+            // Create gradients where values above 0.5 are less transparent
+            const createGradient = (ctx, r, g, b) => {
+                const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
+                gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.7)`);  // Top (y=1.0) - less transparent
+                gradient.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, 0.4)`); // Middle (y=0.5) - medium
+                gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0.3)`);  // Bottom (y=0) - more transparent
+                return gradient;
+            };
+
             const datasets = [
                 {
                     label: 'S&P 500',
                     data: ma50Data.sp500 || [],
-                    backgroundColor: 'rgba(30, 136, 229, 0.4)',
+                    backgroundColor: createGradient(ctx.getContext('2d'), 30, 136, 229),
                     borderColor: 'rgba(30, 136, 229, 0.8)',
                     borderWidth: 2,
                     tension: 0,
@@ -2918,7 +2936,7 @@ def index():
                 {
                     label: 'Nasdaq 100',
                     data: ma50Data.nasdaq100 || [],
-                    backgroundColor: 'rgba(255, 179, 0, 0.4)',
+                    backgroundColor: createGradient(ctx.getContext('2d'), 255, 179, 0),
                     borderColor: 'rgba(255, 179, 0, 0.8)',
                     borderWidth: 2,
                     tension: 0,
@@ -2927,7 +2945,7 @@ def index():
                 {
                     label: 'Full 5000',
                     data: ma50Data.full5000 || [],
-                    backgroundColor: 'rgba(0, 200, 83, 0.4)',
+                    backgroundColor: createGradient(ctx.getContext('2d'), 0, 200, 83),
                     borderColor: 'rgba(0, 200, 83, 0.8)',
                     borderWidth: 2,
                     tension: 0,
@@ -2994,11 +3012,20 @@ def index():
 
             const fontSize = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
 
+            // Create gradients where values above 0.5 are less transparent
+            const createGradient = (ctx, r, g, b) => {
+                const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
+                gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.7)`);  // Top (y=1.0) - less transparent
+                gradient.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, 0.4)`); // Middle (y=0.5) - medium
+                gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0.3)`);  // Bottom (y=0) - more transparent
+                return gradient;
+            };
+
             const datasets = [
                 {
                     label: 'S&P 500',
                     data: maPeriodData.sp500 || [],
-                    backgroundColor: 'rgba(30, 136, 229, 0.4)',
+                    backgroundColor: createGradient(ctx.getContext('2d'), 30, 136, 229),
                     borderColor: 'rgba(30, 136, 229, 0.8)',
                     borderWidth: 2,
                     tension: 0,
@@ -3007,7 +3034,7 @@ def index():
                 {
                     label: 'Nasdaq 100',
                     data: maPeriodData.nasdaq100 || [],
-                    backgroundColor: 'rgba(255, 179, 0, 0.4)',
+                    backgroundColor: createGradient(ctx.getContext('2d'), 255, 179, 0),
                     borderColor: 'rgba(255, 179, 0, 0.8)',
                     borderWidth: 2,
                     tension: 0,
@@ -3016,7 +3043,7 @@ def index():
                 {
                     label: 'Full 5000',
                     data: maPeriodData.full5000 || [],
-                    backgroundColor: 'rgba(0, 200, 83, 0.4)',
+                    backgroundColor: createGradient(ctx.getContext('2d'), 0, 200, 83),
                     borderColor: 'rgba(0, 200, 83, 0.8)',
                     borderWidth: 2,
                     tension: 0,
