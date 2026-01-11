@@ -1333,7 +1333,7 @@ def get_statistics():
                         forward_gain = 0
                     
                     # Bucket and store
-                    ma20_bucket = min(int(pct_above_ma20 / 2) * 2, 20)  # Bucket by 2%
+                    ma20_bucket = min(int(pct_above_ma20 / 2) * 2, 10)  # Bucket by 2%, up to 10%
                     ma50_bucket = min(int(pct_above_ma50 / 2) * 2, 20)
                     
                     if is_sp500:
@@ -2804,7 +2804,7 @@ def index():
                     backgroundColor: 'rgba(30, 136, 229, 0.4)',
                     borderColor: 'rgba(30, 136, 229, 0.8)',
                     borderWidth: 2,
-                    tension: 0.4,
+                    tension: 0,
                     fill: true
                 },
                 {
@@ -2813,7 +2813,7 @@ def index():
                     backgroundColor: 'rgba(255, 179, 0, 0.4)',
                     borderColor: 'rgba(255, 179, 0, 0.8)',
                     borderWidth: 2,
-                    tension: 0.4,
+                    tension: 0,
                     fill: true
                 },
                 {
@@ -2822,7 +2822,7 @@ def index():
                     backgroundColor: 'rgba(0, 200, 83, 0.4)',
                     borderColor: 'rgba(0, 200, 83, 0.8)',
                     borderWidth: 2,
-                    tension: 0.4,
+                    tension: 0,
                     fill: true
                 }
             ];
@@ -2870,7 +2870,7 @@ def index():
                     backgroundColor: 'rgba(30, 136, 229, 0.4)',
                     borderColor: 'rgba(30, 136, 229, 0.8)',
                     borderWidth: 2,
-                    tension: 0.4,
+                    tension: 0,
                     fill: true
                 },
                 {
@@ -2879,7 +2879,7 @@ def index():
                     backgroundColor: 'rgba(255, 179, 0, 0.4)',
                     borderColor: 'rgba(255, 179, 0, 0.8)',
                     borderWidth: 2,
-                    tension: 0.4,
+                    tension: 0,
                     fill: true
                 },
                 {
@@ -2888,7 +2888,7 @@ def index():
                     backgroundColor: 'rgba(0, 200, 83, 0.4)',
                     borderColor: 'rgba(0, 200, 83, 0.8)',
                     borderWidth: 2,
-                    tension: 0.4,
+                    tension: 0,
                     fill: true
                 }
             ];
@@ -2933,28 +2933,34 @@ def index():
                 {
                     label: 'S&P 500',
                     data: maPeriodData.sp500 || [],
-                    backgroundColor: 'rgba(30, 136, 229, 0.6)',
+                    backgroundColor: 'rgba(30, 136, 229, 0.4)',
                     borderColor: 'rgba(30, 136, 229, 0.8)',
-                    borderWidth: 1
+                    borderWidth: 2,
+                    tension: 0,
+                    fill: true
                 },
                 {
                     label: 'Nasdaq 100',
                     data: maPeriodData.nasdaq100 || [],
-                    backgroundColor: 'rgba(255, 179, 0, 0.6)',
+                    backgroundColor: 'rgba(255, 179, 0, 0.4)',
                     borderColor: 'rgba(255, 179, 0, 0.8)',
-                    borderWidth: 1
+                    borderWidth: 2,
+                    tension: 0,
+                    fill: true
                 },
                 {
                     label: 'Full 5000',
                     data: maPeriodData.full5000 || [],
-                    backgroundColor: 'rgba(0, 200, 83, 0.6)',
+                    backgroundColor: 'rgba(0, 200, 83, 0.4)',
                     borderColor: 'rgba(0, 200, 83, 0.8)',
-                    borderWidth: 1
+                    borderWidth: 2,
+                    tension: 0,
+                    fill: true
                 }
             ];
 
             statsCharts.maPeriod = new Chart(ctx, {
-                type: 'bar',
+                type: 'line',
                 data: {
                     labels: maPeriodData.labels || [],
                     datasets: datasets
@@ -2962,7 +2968,6 @@ def index():
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    indexAxis: 'x',
                     plugins: {
                         legend: {
                             labels: { color: '#e0e0e0' }
@@ -2970,15 +2975,14 @@ def index():
                     },
                     scales: {
                         y: {
-                            stacked: false,
                             ticks: { color: '#999' },
                             grid: { color: '#2a3f5f' },
-                            title: { text: 'Normalized Frequency', color: '#999' }
+                            title: { text: 'Normalized Frequency', color: '#999', display: true }
                         },
                         x: {
                             ticks: { color: '#999' },
                             grid: { color: '#2a3f5f' },
-                            title: { text: 'MA Period', color: '#999' }
+                            title: { text: 'MA Period', color: '#999', display: true }
                         }
                     }
                 }
