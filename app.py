@@ -1272,6 +1272,160 @@ def get_stock_detail(ticker):
     cleaned_analysis = clean_nan_values(analysis)
     return jsonify(cleaned_analysis)
 
+@app.route('/api/statistics', methods=['GET'])
+def get_statistics():
+    """Get historical statistics from database for visualization"""
+    try:
+        conn = db.get_conn()
+        c = conn.cursor()
+        
+        # Get min/max settings for MA period range
+        settings = screening_state['settings']
+        ma_min = settings.get('ma_min_period', 150)
+        ma_max = settings.get('ma_max_period', 200)
+        
+        # Define index symbols
+        sp500_symbols = get_sp500_symbols()
+        nasdaq100_symbols = get_nasdaq100_symbols()
+        
+        # Query price data to calculate statistics
+        c.execute('SELECT DISTINCT ticker FROM price_data')
+        all_tickers = [row[0] for row in c.fetchall()]
+        
+        ma20_gains = {'sp500': [], 'nasdaq100': [], 'full5000': [], 'labels': []}
+        ma50_gains = {'sp500': [], 'nasdaq100': [], 'full5000': [], 'labels': []}
+        ma_period_counts = {}
+        
+        # Process each ticker
+        for ticker in all_tickers[:500]:  # Limit to first 500 for performance
+            try:
+                # Categorize ticker
+                is_sp500 = ticker in sp500_symbols
+                is_nasdaq100 = ticker in nasdaq100_symbols
+                
+                # Get price data
+                df = db.get_price_data(ticker, days=1095)
+                if df is None or len(df) < 200:
+                    continue
+                
+                prices = df['close'].values
+                
+                # Calculate MAs
+                ma20 = pd.Series(prices).rolling(window=20).mean().values
+                ma50 = pd.Series(prices).rolling(window=50).mean().values
+                
+                # Calculate % above each MA (last 30 days average)
+                if len(prices) >= 30:
+                    recent_idx = list(range(len(prices)-30, len(prices)))
+                    pct_above_ma20 = np.nanmean([
+                        ((prices[i] - ma20[i]) / ma20[i] * 100) if ma20[i] else 0 
+                        for i in recent_idx if i < len(ma20) and ma20[i]
+                    ])
+                    pct_above_ma50 = np.nanmean([
+                        ((prices[i] - ma50[i]) / ma50[i] * 100) if ma50[i] else 0 
+                        for i in recent_idx if i < len(ma50) and ma50[i]
+                    ])
+                    
+                    # Calculate forward gain (30 days if available)
+                    if len(prices) > 30:
+                        forward_gain = ((prices[-1] - prices[-31]) / prices[-31] * 100) if prices[-31] else 0
+                    else:
+                        forward_gain = 0
+                    
+                    # Bucket and store
+                    ma20_bucket = min(int(pct_above_ma20 / 2) * 2, 20)  # Bucket by 2%
+                    ma50_bucket = min(int(pct_above_ma50 / 2) * 2, 20)
+                    
+                    if is_sp500:
+                        if len(ma20_gains['sp500']) <= ma20_bucket:
+                            ma20_gains['sp500'].extend([0] * (ma20_bucket + 1 - len(ma20_gains['sp500'])))
+                        if len(ma50_gains['sp500']) <= ma50_bucket:
+                            ma50_gains['sp500'].extend([0] * (ma50_bucket + 1 - len(ma50_gains['sp500'])))
+                        ma20_gains['sp500'][ma20_bucket] = (ma20_gains['sp500'][ma20_bucket] + forward_gain) / 2
+                        ma50_gains['sp500'][ma50_bucket] = (ma50_gains['sp500'][ma50_bucket] + forward_gain) / 2
+                    
+                    if is_nasdaq100:
+                        if len(ma20_gains['nasdaq100']) <= ma20_bucket:
+                            ma20_gains['nasdaq100'].extend([0] * (ma20_bucket + 1 - len(ma20_gains['nasdaq100'])))
+                        if len(ma50_gains['nasdaq100']) <= ma50_bucket:
+                            ma50_gains['nasdaq100'].extend([0] * (ma50_bucket + 1 - len(ma50_gains['nasdaq100'])))
+                        ma20_gains['nasdaq100'][ma20_bucket] = (ma20_gains['nasdaq100'][ma20_bucket] + forward_gain) / 2
+                        ma50_gains['nasdaq100'][ma50_bucket] = (ma50_gains['nasdaq100'][ma50_bucket] + forward_gain) / 2
+                    
+                    # All stocks
+                    if len(ma20_gains['full5000']) <= ma20_bucket:
+                        ma20_gains['full5000'].extend([0] * (ma20_bucket + 1 - len(ma20_gains['full5000'])))
+                    if len(ma50_gains['full5000']) <= ma50_bucket:
+                        ma50_gains['full5000'].extend([0] * (ma50_bucket + 1 - len(ma50_gains['full5000'])))
+                    ma20_gains['full5000'][ma20_bucket] = (ma20_gains['full5000'][ma20_bucket] + forward_gain) / 2
+                    ma50_gains['full5000'][ma50_bucket] = (ma50_gains['full5000'][ma50_bucket] + forward_gain) / 2
+                
+                # Track optimal MA period
+                if len(prices) >= ma_max:
+                    best_period = 175  # Default
+                    best_score = float('inf')
+                    for period in range(ma_min, ma_max + 1, 5):
+                        ma_vals = pd.Series(prices).rolling(window=period).mean().values
+                        recent_ma = ma_vals[-60:]
+                        recent_prices = prices[-60:]
+                        if len(recent_ma) > 0:
+                            deviations = recent_prices - recent_ma
+                            score = np.std(deviations[~np.isnan(deviations)])
+                            if score < best_score:
+                                best_score = score
+                                best_period = period
+                    
+                    if best_period not in ma_period_counts:
+                        ma_period_counts[best_period] = {'sp500': 0, 'nasdaq100': 0, 'full5000': 0}
+                    
+                    if is_sp500:
+                        ma_period_counts[best_period]['sp500'] += 1
+                    if is_nasdaq100:
+                        ma_period_counts[best_period]['nasdaq100'] += 1
+                    ma_period_counts[best_period]['full5000'] += 1
+            except Exception as e:
+                continue
+        
+        conn.close()
+        
+        # Format MA20/50 labels
+        ma20_gains['labels'] = [f'{i*2}%' for i in range(len(ma20_gains['sp500']))]
+        ma50_gains['labels'] = [f'{i*2}%' for i in range(len(ma50_gains['sp500']))]
+        
+        # Normalize MA period counts to frequencies
+        ma_period_sorted = sorted(ma_period_counts.keys())
+        max_count = max([max(ma_period_counts[p].values()) for p in ma_period_sorted]) if ma_period_sorted else 1
+        
+        ma_period_dist = {
+            'labels': [str(p) for p in ma_period_sorted],
+            'sp500': [ma_period_counts[p]['sp500'] / max_count for p in ma_period_sorted],
+            'nasdaq100': [ma_period_counts[p]['nasdaq100'] / max_count for p in ma_period_sorted],
+            'full5000': [ma_period_counts[p]['full5000'] / max_count for p in ma_period_sorted]
+        }
+        
+        return jsonify({
+            'ma20_gains': ma20_gains,
+            'ma50_gains': ma50_gains,
+            'ma_period_distribution': ma_period_dist
+        })
+    except Exception as e:
+        print(f"Error calculating statistics: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+def get_sp500_symbols():
+    """Get S&P 500 symbols (cached)"""
+    sp500 = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'BRK.B', 'JNJ', 'WMT',
+             'V', 'MA', 'PG', 'XOM', 'HD', 'MCD', 'NKE', 'ADBE', 'CRM', 'CVX']
+    return set(sp500)
+
+def get_nasdaq100_symbols():
+    """Get Nasdaq 100 symbols (cached)"""
+    nasdaq100 = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'NFLX', 'AVGO', 'COST',
+                 'ADBE', 'CMCSA', 'ASML', 'PEP', 'QCOM', 'INTC', 'AMD', 'CSCO', 'INTU', 'SBUX']
+    return set(nasdaq100)
+
 @app.route('/api/settings', methods=['GET'])
 def get_settings():
     """Get current screening settings"""
@@ -2042,7 +2196,8 @@ def index():
 
         <!-- Main List View -->
         <div class="view-container active" id="listView">
-            <div style="margin-bottom: 20px; text-align: right;">
+            <div style="margin-bottom: 20px; text-align: right; display: flex; gap: 10px; justify-content: flex-end;">
+                <button id="statsBtn" onclick="openStatistics()" style="background: #2a3f5f; padding: 8px 16px; width: auto;">📊 Statistics</button>
                 <button id="settingsBtn" onclick="toggleSettings()" style="background: #2a3f5f; padding: 8px 16px; width: auto;">⚙ Settings</button>
             </div>
 
@@ -2261,6 +2416,30 @@ def index():
                 <div class="card">
                     <div id="newsDiv"></div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics Modal -->
+    <div id="statisticsModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; overflow: auto;">
+        <div style="background: #0f1419; margin: 20px auto; padding: 30px; border-radius: 8px; max-width: 1400px; border: 2px solid #1e88e5;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="color: #1e88e5; margin: 0;">📊 Historical Statistics</h2>
+                <button id="closeStatsBtn" onclick="closeStatistics()" style="background: #d32f2f; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 1em;">✕ Close</button>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px;">
+                <div style="background: #1a1f2e; padding: 20px; border-radius: 8px; border: 1px solid #2a3f5f;">
+                    <h3 style="color: #1e88e5; margin-top: 0;">% Above MA20 → Gains</h3>
+                    <canvas id="ma20GainChart" height="300"></canvas>
+                </div>
+                <div style="background: #1a1f2e; padding: 20px; border-radius: 8px; border: 1px solid #2a3f5f;">
+                    <h3 style="color: #1e88e5; margin-top: 0;">% Above MA50 → Gains</h3>
+                    <canvas id="ma50GainChart" height="300"></canvas>
+                </div>
+            </div>
+            <div style="background: #1a1f2e; padding: 20px; border-radius: 8px; border: 1px solid #2a3f5f;">
+                <h3 style="color: #1e88e5; margin-top: 0;">Optimal MA Period Distribution</h3>
+                <canvas id="maPeriodChart" height="200"></canvas>
             </div>
         </div>
     </div>
@@ -2560,6 +2739,245 @@ def index():
         
         // Make toggleChartType globally accessible for onclick
         window.toggleChartType = toggleChartType;
+
+        function openStatistics() {
+            const modal = document.getElementById('statisticsModal');
+            if (!modal) return;
+            modal.style.display = 'block';
+            loadStatistics();
+        }
+
+        function closeStatistics() {
+            const modal = document.getElementById('statisticsModal');
+            if (!modal) return;
+            modal.style.display = 'none';
+        }
+
+        // Close modal when clicking outside
+        window.addEventListener('click', (e) => {
+            const modal = document.getElementById('statisticsModal');
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+
+        let statsCharts = { ma20: null, ma50: null, maPeriod: null };
+
+        function loadStatistics() {
+            fetch('/api/statistics')
+                .then(r => r.json())
+                .then(data => {
+                    console.log('Statistics data loaded:', data);
+                    renderStatistics(data);
+                })
+                .catch(err => {
+                    console.error('Error loading statistics:', err);
+                    alert('Error loading statistics: ' + err.message);
+                });
+        }
+
+        function renderStatistics(data) {
+            // Render MA20 Gains Chart
+            renderMA20Chart(data.ma20_gains);
+            // Render MA50 Gains Chart
+            renderMA50Chart(data.ma50_gains);
+            // Render MA Period Distribution Chart
+            renderMAPeriodChart(data.ma_period_distribution);
+        }
+
+        function renderMA20Chart(ma20Data) {
+            const ctx = document.getElementById('ma20GainChart');
+            if (!ctx) return;
+
+            if (statsCharts.ma20) statsCharts.ma20.destroy();
+
+            const datasets = [
+                {
+                    label: 'S&P 500',
+                    data: ma20Data.sp500 || [],
+                    backgroundColor: 'rgba(30, 136, 229, 0.4)',
+                    borderColor: 'rgba(30, 136, 229, 0.8)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true
+                },
+                {
+                    label: 'Nasdaq 100',
+                    data: ma20Data.nasdaq100 || [],
+                    backgroundColor: 'rgba(255, 179, 0, 0.4)',
+                    borderColor: 'rgba(255, 179, 0, 0.8)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true
+                },
+                {
+                    label: 'Full 5000',
+                    data: ma20Data.full5000 || [],
+                    backgroundColor: 'rgba(0, 200, 83, 0.4)',
+                    borderColor: 'rgba(0, 200, 83, 0.8)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true
+                }
+            ];
+
+            statsCharts.ma20 = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ma20Data.labels || [],
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#e0e0e0' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            ticks: { color: '#999' },
+                            grid: { color: '#2a3f5f' },
+                            title: { text: 'Avg Gain %', color: '#999' }
+                        },
+                        x: {
+                            ticks: { color: '#999' },
+                            grid: { color: '#2a3f5f' },
+                            title: { text: '% Above MA20', color: '#999' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderMA50Chart(ma50Data) {
+            const ctx = document.getElementById('ma50GainChart');
+            if (!ctx) return;
+
+            if (statsCharts.ma50) statsCharts.ma50.destroy();
+
+            const datasets = [
+                {
+                    label: 'S&P 500',
+                    data: ma50Data.sp500 || [],
+                    backgroundColor: 'rgba(30, 136, 229, 0.4)',
+                    borderColor: 'rgba(30, 136, 229, 0.8)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true
+                },
+                {
+                    label: 'Nasdaq 100',
+                    data: ma50Data.nasdaq100 || [],
+                    backgroundColor: 'rgba(255, 179, 0, 0.4)',
+                    borderColor: 'rgba(255, 179, 0, 0.8)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true
+                },
+                {
+                    label: 'Full 5000',
+                    data: ma50Data.full5000 || [],
+                    backgroundColor: 'rgba(0, 200, 83, 0.4)',
+                    borderColor: 'rgba(0, 200, 83, 0.8)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true
+                }
+            ];
+
+            statsCharts.ma50 = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ma50Data.labels || [],
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#e0e0e0' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            ticks: { color: '#999' },
+                            grid: { color: '#2a3f5f' },
+                            title: { text: 'Avg Gain %', color: '#999' }
+                        },
+                        x: {
+                            ticks: { color: '#999' },
+                            grid: { color: '#2a3f5f' },
+                            title: { text: '% Above MA50', color: '#999' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderMAPeriodChart(maPeriodData) {
+            const ctx = document.getElementById('maPeriodChart');
+            if (!ctx) return;
+
+            if (statsCharts.maPeriod) statsCharts.maPeriod.destroy();
+
+            const datasets = [
+                {
+                    label: 'S&P 500',
+                    data: maPeriodData.sp500 || [],
+                    backgroundColor: 'rgba(30, 136, 229, 0.6)',
+                    borderColor: 'rgba(30, 136, 229, 0.8)',
+                    borderWidth: 1
+                },
+                {
+                    label: 'Nasdaq 100',
+                    data: maPeriodData.nasdaq100 || [],
+                    backgroundColor: 'rgba(255, 179, 0, 0.6)',
+                    borderColor: 'rgba(255, 179, 0, 0.8)',
+                    borderWidth: 1
+                },
+                {
+                    label: 'Full 5000',
+                    data: maPeriodData.full5000 || [],
+                    backgroundColor: 'rgba(0, 200, 83, 0.6)',
+                    borderColor: 'rgba(0, 200, 83, 0.8)',
+                    borderWidth: 1
+                }
+            ];
+
+            statsCharts.maPeriod = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: maPeriodData.labels || [],
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'x',
+                    plugins: {
+                        legend: {
+                            labels: { color: '#e0e0e0' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            stacked: false,
+                            ticks: { color: '#999' },
+                            grid: { color: '#2a3f5f' },
+                            title: { text: 'Normalized Frequency', color: '#999' }
+                        },
+                        x: {
+                            ticks: { color: '#999' },
+                            grid: { color: '#2a3f5f' },
+                            title: { text: 'MA Period', color: '#999' }
+                        }
+                    }
+                }
+            });
+        }
 
         function setRange(range) {
             currentRange = range;
