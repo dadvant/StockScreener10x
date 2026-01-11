@@ -657,31 +657,41 @@ class TenXHunter:
             prices = data['close'].values
             current_price = prices[-1]
             
-            # STEP 2: Find OPTIMAL MA (150-200) for this stock
-            optimal_ma = 150
-            best_ma_score = -999
-            
-            for ma_days in range(150, 201):
-                if len(prices) < ma_days:
-                    continue
-                sma = pd.Series(prices).rolling(window=ma_days).mean().values
-                if pd.isna(sma[-1]):
-                    continue
-                
-                # How much price is above this MA (positive = good, negative = bad)
-                pct_above = ((prices[-1] - sma[-1]) / sma[-1]) * 100
-                if pct_above > best_ma_score:
-                    best_ma_score = pct_above
-                    optimal_ma = ma_days
-            
-            # Calculate the optimal MA value
-            ma_value = pd.Series(prices).rolling(window=optimal_ma).mean().values[-1]
+            # STEP 2: Find OPTIMAL MA (150-200) using residual error minimization
+            def _optimal_ma_by_residual(series: np.ndarray, min_p: int = 150, max_p: int = 200, lookback: int = 120):
+                best_period = None
+                best_rmse = None
+                best_value = None
+                s = pd.Series(series)
+                for p in range(min_p, max_p + 1):
+                    if len(series) < p:
+                        continue
+                    sma = s.rolling(window=p).mean().values
+                    # Use last `lookback` days for residuals (skip NaNs)
+                    tail_prices = series[-lookback:]
+                    tail_sma = sma[-lookback:]
+                    mask = ~pd.isna(tail_sma)
+                    if not mask.any():
+                        continue
+                    residuals = tail_prices[mask] - tail_sma[mask]
+                    rmse = float(np.sqrt(np.mean(residuals**2))) if residuals.size else None
+                    if rmse is None:
+                        continue
+                    if best_rmse is None or rmse < best_rmse:
+                        best_rmse = rmse
+                        best_period = p
+                        best_value = float(s.rolling(window=p).mean().values[-1])
+                return best_period, best_value, best_rmse
+
+            optimal_ma, ma_value, _rmse = _optimal_ma_by_residual(prices)
+            if optimal_ma is None or ma_value is None:
+                return None
             
             # STEP 3: HARD FILTER - Price MUST be above optimal MA
             if current_price <= ma_value:
                 return None
             
-            # How far above the MA
+            # How far above the optimal MA
             pct_above_ma = ((current_price - ma_value) / ma_value) * 100
             
             # STEP 4: Calculate recent gains
@@ -697,17 +707,46 @@ class TenXHunter:
             
             settings = screening_state['settings']
             
-            # STEP 5: Calculate conviction based on momentum
-            conviction = 0
+            # STEP 5: Calculate conviction based on momentum + MA distance sweet spots
+            conviction = 0.0
             breakdown = {}
-            
+
+            # Helper: sweet-spot score for MA distance (0..1)
+            def _sweet_spot_score(pct: float, spot_min: float, spot_max: float, lo: float, hi: float) -> float:
+                # Outside tolerance bounds -> 0
+                if pct <= lo or pct >= hi:
+                    return 0.0
+                # Rise from lo to spot_min
+                if pct < spot_min:
+                    return max(0.0, (pct - lo) / (spot_min - lo))
+                # Peak plateau inside [spot_min, spot_max]
+                if spot_min <= pct <= spot_max:
+                    return 1.0
+                # Fall from spot_max to hi
+                return max(0.0, (hi - pct) / (hi - spot_max))
+
+            # Compute MA20/50 distances (last values)
+            s_prices = pd.Series(prices)
+            ma20_last = float(s_prices.rolling(window=20).mean().values[-1]) if len(prices) >= 20 else None
+            ma50_last = float(s_prices.rolling(window=50).mean().values[-1]) if len(prices) >= 50 else None
+            pct_above_ma20 = ((current_price - ma20_last) / ma20_last) * 100 if ma20_last and ma20_last > 0 else None
+            pct_above_ma50 = ((current_price - ma50_last) / ma50_last) * 100 if ma50_last and ma50_last > 0 else None
+
             # Base points for being above optimal MA
             breakdown['base_above_ma'] = 2.0
             conviction += breakdown['base_above_ma']
-            
-            # How far above optimal MA (every 10% = 1 point, capped at 2)
-            breakdown['pct_above_ma_component'] = float(min(2.0, pct_above_ma / 10))
-            conviction += breakdown['pct_above_ma_component']
+
+            # Composite MA-distance score (up to 1 + 1 + 2 = 4 points)
+            # Sweet spots (heuristic, can later be replaced by learned histograms):
+            # MA20: 3%-7%, MA50: 2%-6%, MA150/200: 1%-5% (double weight)
+            score20 = _sweet_spot_score(pct_above_ma20 or 0.0, 3.0, 7.0, -5.0, 12.0)
+            score50 = _sweet_spot_score(pct_above_ma50 or 0.0, 2.0, 6.0, -5.0, 10.0)
+            scoreTrend = _sweet_spot_score(pct_above_ma, 1.0, 5.0, -4.0, 9.0)
+            breakdown['ma_distance_score_20'] = float(score20)
+            breakdown['ma_distance_score_50'] = float(score50)
+            breakdown['ma_distance_score_trend'] = float(scoreTrend)
+            breakdown['ma_distance_composite'] = float(score20 + score50 + 2.0 * scoreTrend)
+            conviction += breakdown['ma_distance_composite']
             
             # Recent momentum components
             breakdown['momentum_1m'] = float(min(1.5, gain_1m / 10)) if gain_1m > 0 else 0.0
@@ -722,6 +761,14 @@ class TenXHunter:
             # Bonus for strong recent momentum (last month)
             breakdown['bonus_1m'] = 1.0 if gain_1m > 15 else 0.0
             conviction += breakdown['bonus_1m']
+
+            # Optional: News/Event scoring (placeholder heuristic; to be enhanced)
+            def _news_event_score(tkr: str) -> float:
+                # TODO: integrate real news sentiment & event calendar
+                # For now, conservative 0 score
+                return 0.0
+            breakdown['news_event'] = _news_event_score(ticker)
+            conviction += breakdown['news_event']
             
             conviction = float(max(0, min(10, conviction)))
             breakdown['total'] = conviction
@@ -762,6 +809,8 @@ class TenXHunter:
                 'optimal_ma': int(optimal_ma),
                 'ma_value': float(ma_value),
                 'pct_above_ma': float(pct_above_ma),
+                'pct_above_ma20': float(pct_above_ma20) if pct_above_ma20 is not None else None,
+                'pct_above_ma50': float(pct_above_ma50) if pct_above_ma50 is not None else None,
                 'gain_1m': float(gain_1m),
                 'gain_3m': float(gain_3m),
                 'gain_6m': float(gain_6m),
@@ -782,6 +831,15 @@ class TenXHunter:
                 'score_breakdown': breakdown
 
             }
+
+            # Classify candidate: momentum vs potential 10x (early-trend)
+            # Simple heuristic: high recent gains -> momentum; strong MA-distance composite with moderate recent gains -> 10x
+            momentum_score = float(min(10.0, (max(0.0, gain_1m) / 10.0) * 3 + (max(0.0, gain_3m) / 10.0) * 2 + (max(0.0, gain_6m) / 20.0) * 3))
+            tenx_score = float(min(10.0, (breakdown['ma_distance_composite'] * 2.0) + (max(0.0, gain_1y) / 50.0) * 2 + breakdown.get('news_event', 0)))
+            result['momentum_score'] = momentum_score
+            result['ten_x_score'] = tenx_score
+            result['is_momentum'] = momentum_score >= 6.0
+            result['is_ten_x'] = tenx_score >= 6.0
 
             # Add AI analysis / reasoning for card summary (short form)
             try:
