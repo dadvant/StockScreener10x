@@ -1393,6 +1393,18 @@ def get_statistics():
             while len(ma20_gains[key]) < 6:  # 6 buckets for 0-10%
                 ma20_gains[key].append(0)
         
+        # Normalize MA20 and MA50 gains to 0-1 range
+        ma20_max = max([max(ma20_gains[k]) for k in ['sp500', 'nasdaq100', 'full5000']]) if any(ma20_gains['sp500']) else 1
+        ma50_max = max([max(ma50_gains[k]) for k in ['sp500', 'nasdaq100', 'full5000']]) if any(ma50_gains['sp500']) else 1
+        
+        if ma20_max > 0:
+            for key in ['sp500', 'nasdaq100', 'full5000']:
+                ma20_gains[key] = [v / ma20_max for v in ma20_gains[key]]
+        
+        if ma50_max > 0:
+            for key in ['sp500', 'nasdaq100', 'full5000']:
+                ma50_gains[key] = [v / ma50_max for v in ma50_gains[key]]
+        
         # Format MA20/50 labels
         ma20_gains['labels'] = [f'{i*2}%' for i in range(6)]  # Fixed to 0-10%
         ma50_gains['labels'] = [f'{i*2}%' for i in range(len(ma50_gains['sp500']))]
@@ -2802,6 +2814,8 @@ def index():
 
             if (statsCharts.ma20) statsCharts.ma20.destroy();
 
+            const fontSize = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+
             const datasets = [
                 {
                     label: 'S&P 500',
@@ -2843,20 +2857,40 @@ def index():
                     maintainAspectRatio: false,
                     plugins: {
                         legend: {
-                            labels: { color: '#e0e0e0' }
+                            labels: { 
+                                color: '#e0e0e0',
+                                font: { size: fontSize * 0.875 }
+                            }
                         }
                     },
                     scales: {
                         y: {
                             beginAtZero: true,
-                            ticks: { color: '#999' },
+                            max: 1.0,
+                            ticks: { 
+                                color: '#999',
+                                font: { size: fontSize * 0.75 }
+                            },
                             grid: { color: '#2a3f5f' },
-                            title: { text: 'Avg Gain %', color: '#999' }
+                            title: { 
+                                text: 'Normalized Score (0-1)', 
+                                color: '#999',
+                                display: true,
+                                font: { size: fontSize * 0.875 }
+                            }
                         },
                         x: {
-                            ticks: { color: '#999' },
+                            ticks: { 
+                                color: '#999',
+                                font: { size: fontSize * 0.75 }
+                            },
                             grid: { color: '#2a3f5f' },
-                            title: { text: '% Above MA20', color: '#999' }
+                            title: { 
+                                text: '% Above MA20', 
+                                color: '#999',
+                                display: true,
+                                font: { size: fontSize * 0.875 }
+                            }
                         }
                     }
                 }
@@ -2868,6 +2902,8 @@ def index():
             if (!ctx) return;
 
             if (statsCharts.ma50) statsCharts.ma50.destroy();
+
+            const fontSize = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
 
             const datasets = [
                 {
@@ -2910,20 +2946,40 @@ def index():
                     maintainAspectRatio: false,
                     plugins: {
                         legend: {
-                            labels: { color: '#e0e0e0' }
+                            labels: { 
+                                color: '#e0e0e0',
+                                font: { size: fontSize * 0.875 }
+                            }
                         }
                     },
                     scales: {
                         y: {
                             beginAtZero: true,
-                            ticks: { color: '#999' },
+                            max: 1.0,
+                            ticks: { 
+                                color: '#999',
+                                font: { size: fontSize * 0.75 }
+                            },
                             grid: { color: '#2a3f5f' },
-                            title: { text: 'Avg Gain %', color: '#999' }
+                            title: { 
+                                text: 'Normalized Score (0-1)', 
+                                color: '#999',
+                                display: true,
+                                font: { size: fontSize * 0.875 }
+                            }
                         },
                         x: {
-                            ticks: { color: '#999' },
+                            ticks: { 
+                                color: '#999',
+                                font: { size: fontSize * 0.75 }
+                            },
                             grid: { color: '#2a3f5f' },
-                            title: { text: '% Above MA50', color: '#999' }
+                            title: { 
+                                text: '% Above MA50', 
+                                color: '#999',
+                                display: true,
+                                font: { size: fontSize * 0.875 }
+                            }
                         }
                     }
                 }
@@ -2935,6 +2991,8 @@ def index():
             if (!ctx) return;
 
             if (statsCharts.maPeriod) statsCharts.maPeriod.destroy();
+
+            const fontSize = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
 
             const datasets = [
                 {
@@ -2977,20 +3035,40 @@ def index():
                     maintainAspectRatio: false,
                     plugins: {
                         legend: {
-                            labels: { color: '#e0e0e0' }
+                            labels: { 
+                                color: '#e0e0e0',
+                                font: { size: fontSize * 0.875 }
+                            }
                         }
                     },
                     scales: {
                         y: {
                             beginAtZero: true,
-                            ticks: { color: '#999' },
+                            max: 1.0,
+                            ticks: { 
+                                color: '#999',
+                                font: { size: fontSize * 0.75 }
+                            },
                             grid: { color: '#2a3f5f' },
-                            title: { text: 'Normalized Frequency', color: '#999', display: true }
+                            title: { 
+                                text: 'Normalized Frequency (0-1)', 
+                                color: '#999', 
+                                display: true,
+                                font: { size: fontSize * 0.875 }
+                            }
                         },
                         x: {
-                            ticks: { color: '#999' },
+                            ticks: { 
+                                color: '#999',
+                                font: { size: fontSize * 0.75 }
+                            },
                             grid: { color: '#2a3f5f' },
-                            title: { text: 'MA Period', color: '#999', display: true }
+                            title: { 
+                                text: 'MA Period', 
+                                color: '#999', 
+                                display: true,
+                                font: { size: fontSize * 0.875 }
+                            }
                         }
                     }
                 }
