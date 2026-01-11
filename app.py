@@ -59,6 +59,7 @@ default_settings = {
     'volume_ratio_min': 0.8,
     'ma_min_period': 150,
     'ma_max_period': 200,
+    'font_size': 1.0,
     'show_ma_20': True,
     'show_ma_50': True,
     'show_ma_optimal_trend': True,
@@ -499,35 +500,41 @@ class TenXHunter:
         try:
             # Check database first
             cached_news = db.get_news(ticker, limit)
-            if cached_news:
+            if cached_news and len(cached_news) > 0:
                 return cached_news
             
-            # If not in DB, fetch new news
+            # If not in DB, fetch new news from yfinance
+            articles = []
             try:
                 stock = yf.Ticker(ticker)
                 news = stock.news
+                if news and isinstance(news, list):
+                    for item in news[:limit]:
+                        title = item.get('title', '').strip()
+                        source = item.get('source', 'Unknown')
+                        link = item.get('link', '') or ''
+                        published = item.get('providerPublishTime', '')
+                        # Only add if we have a title
+                        if title:
+                            articles.append({
+                                'title': title,
+                                'source': source,
+                                'link': link,
+                                'published': published
+                            })
             except Exception as e:
-                print(f"Warning: Failed to fetch news for {ticker}: {e}")
-                return []
+                pass  # Silently fail and try cached
             
-            articles = []
-            for item in news[:limit]:
-                articles.append({
-                    'title': item.get('title', 'N/A'),
-                    'source': item.get('source', 'N/A'),
-                    'link': item.get('link', 'N/A'),
-                    'published': item.get('providerPublishTime', 'N/A')
-                })
-            
-            # Save to database
+            # Save to database if we got fresh articles
             if articles:
                 db.save_news(ticker, articles)
+                return articles
             
-            return articles
-        except Exception as e:
-            print(f"Error getting news for {ticker}: {e}")
-            # Return cached news if available
+            # Fallback to cached
             return db.get_news(ticker, limit)
+        except Exception as e:
+            # Last resort: return empty list
+            return []
 
     def ai_analysis(self, ticker, data_dict):
         """Generate AI-based analysis for 10x potential"""
@@ -2058,6 +2065,11 @@ def index():
                         <input type="number" id="convictionThreshold" step="0.1" min="0" max="10" placeholder="0-10">
                     </div>
                     <div class="control-group">
+                        <label>Font Size</label>
+                        <input type="range" id="fontSize" step="0.1" min="0.8" max="1.5" value="1.0">
+                        <div id="fontSizeValue" style="margin-top: 8px; font-weight: 600; color: #1e88e5;">100%</div>
+                    </div>
+                    <div class="control-group">
                         <label>RSI Min</label>
                         <input type="number" id="rsiMin" step="1" min="0" max="100" placeholder="0-100">
                     </div>
@@ -2331,6 +2343,16 @@ def index():
                         document.getElementById('volumeRatioMin').value = settings.volume_ratio_min || 0.8;
                         document.getElementById('maMinPeriod').value = settings.ma_min_period || 150;
                         document.getElementById('maMaxPeriod').value = settings.ma_max_period || 200;
+                        
+                        // Load and apply font size
+                        const fontSize = settings.font_size || 1.0;
+                        const fontSizeElement = document.getElementById('fontSize');
+                        if (fontSizeElement) {
+                            fontSizeElement.value = fontSize;
+                            document.getElementById('fontSizeValue').textContent = Math.round(fontSize * 100) + '%';
+                        }
+                        document.documentElement.style.fontSize = (fontSize * 16) + 'px';
+                        
                         console.log('Loaded saved settings:', settings);
                     })
                     .catch(err => {
@@ -2410,6 +2432,21 @@ def index():
                         });
                     });
                 } catch(e) { console.error('range button bind error', e); }
+                
+                // Bind font size slider for live preview
+                try {
+                    const fontSizeSlider = document.getElementById('fontSize');
+                    if (fontSizeSlider) {
+                        fontSizeSlider.addEventListener('input', (e) => {
+                            const fontSize = parseFloat(e.target.value) || 1.0;
+                            document.documentElement.style.fontSize = (fontSize * 16) + 'px';
+                            const fontSizeValueEl = document.getElementById('fontSizeValue');
+                            if (fontSizeValueEl) {
+                                fontSizeValueEl.textContent = Math.round(fontSize * 100) + '%';
+                            }
+                        });
+                    }
+                } catch(e) { console.error('font size slider bind error', e); }
 
                 // Preload current settings into panel
                 loadAndDisplaySettings();
@@ -2571,6 +2608,7 @@ def index():
                 volume_ratio_min: parseFloat(document.getElementById('volumeRatioMin').value) || 0.8,
                 ma_min_period: parseInt(document.getElementById('maMinPeriod').value) || 150,
                 ma_max_period: parseInt(document.getElementById('maMaxPeriod').value) || 200,
+                font_size: parseFloat(document.getElementById('fontSize').value) || 1.0,
                 show_ma_20: true,  // Keep current defaults
                 show_ma_50: true,
                 show_ma_optimal_trend: true,
@@ -2586,6 +2624,7 @@ def index():
             .then(r => r.json())
             .then(updated => {
                 console.log('Settings saved:', updated);
+                document.documentElement.style.fontSize = (settings.font_size * 16) + 'px';
                 alert('Settings saved successfully!');
                 // Immediately re-load results to apply conviction filter without re-scanning
                 loadResults();
@@ -2771,15 +2810,19 @@ def index():
                         const tenx = results.filter(r => r.is_ten_x);
                         const others = results.filter(r => !r.is_momentum && !r.is_ten_x);
 
-                        const section = (title, arr) => arr && arr.length ? `
-                            <h2>${title}</h2>
-                            ${arr.map(cardHtml).join('')}
-                        ` : '';
-
-                        const html = headerMsg
-                            + section('⚡ Momentum Picks', momentum)
-                            + section('🌟 TenX Picks', tenx)
-                            + section('📎 Other Candidates', others);
+                        const colStyle = 'flex: 1; min-width: 400px;';
+                        const html = headerMsg + `
+                            <div style="display: flex; gap: 30px; flex-wrap: wrap;">
+                                <div style="${colStyle}">
+                                    <h2 style="color:#00c853; border-bottom: 2px solid #00c853; padding-bottom: 10px;">🌟 TenX Picks (${tenx.length})</h2>
+                                    ${tenx.length > 0 ? tenx.map(cardHtml).join('') : '<div style="color:#666; padding:20px;">No TenX candidates found</div>'}
+                                </div>
+                                <div style="${colStyle}">
+                                    <h2 style="color:#ffb300; border-bottom: 2px solid #ffb300; padding-bottom: 10px;">⚡ Momentum Picks (${momentum.length})</h2>
+                                    ${momentum.length > 0 ? momentum.map(cardHtml).join('') : '<div style="color:#666; padding:20px;">No Momentum candidates found</div>'}
+                                </div>
+                            </div>
+                            ${others.length > 0 ? `<div style="margin-top: 30px;"><h2 style="color:#999; border-bottom: 2px solid #2a3f5f; padding-bottom: 10px;">📎 Other Candidates (${others.length})</h2>${others.map(cardHtml).join('')}</div>` : ''}`;
 
                         const container = document.getElementById('resultsDiv');
                         container.innerHTML = html;
@@ -3492,7 +3535,16 @@ def index():
                         // News
                         if (payload.news && payload.news.length) {
                             const el = document.getElementById('newsDiv');
-                            if (el) el.innerHTML = payload.news.map((n) => `<div class="news-item"><a href="${n.link}" target="_blank">${n.title}</a> <span style="color:#999">${n.source||''}</span></div>`).join('');
+                            if (el) {
+                                const newsHtml = payload.news.map((n) => {
+                                    const link = n.link && n.link.length > 0 ? `<a href="${n.link}" target="_blank" style="color:#1e88e5;text-decoration:none;font-weight:600">${n.title}</a>` : `<span style="color:#e0e0e0">${n.title}</span>`;
+                                    return `<div class="news-item" style="padding:10px 0;border-bottom:1px solid #2a3f5f;font-size:0.9em">${link}<div style="color:#999;font-size:0.85em;margin-top:4px">${n.source||'Source unknown'} • ${n.published||''}</div></div>`;
+                                }).join('');
+                                el.innerHTML = newsHtml || '<p style="color:#666">No recent news available</p>';
+                            }
+                        } else {
+                            const el = document.getElementById('newsDiv');
+                            if (el) el.innerHTML = '<p style="color:#666">No recent news available</p>';
                         }
 
                         // Chart - preserve current chart type
